@@ -34,8 +34,9 @@ The following variables can be changed in the sysinfo.js:
 
 ## Notes: 
 
-The IP address of the interface used is only displayed to logged-in users.
-
+- The IP address of the interface used is only displayed to logged-in users
+- You can freely move the window on the web interface using drag and drop
+- The small triangle next to CPU Load displays the utilization of individual cores
 
 ## Contact
 
