@@ -1,6 +1,8 @@
 # Sysinfo Plugin for [FM-DX-Webserver](https://github.com/NoobishSVK/fm-dx-webserver)
 This plugin displays relevant system data on the web interface.
 
+<img width="1443" height="833" alt="image" src="https://github.com/user-attachments/assets/508b5a2c-c623-4ead-ba59-c847d8870469" />
+
 
 ## Version 1.0
 
