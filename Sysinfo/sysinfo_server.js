@@ -200,15 +200,6 @@ async function updateHeavyData() {
             }
         }
 
-        // Processes (Top 3)
-        const processes = await si.processes();
-        if (processes && processes.list) {
-            cachedData.processes = processes.list
-                .sort((a, b) => b.cpu - a.cpu)
-                .slice(0, 3)
-                .map(p => ({ name: p.name, cpu: p.cpu.toFixed(1) }));
-        }
-
         const time = await si.time();
         cachedData.uptime = time.uptime;
         
