@@ -19,7 +19,7 @@
   ///////////////////////////////////////////////////////////////
 
   // Plugin metadata
-  const pluginVersion = '1.4';
+  const pluginVersion = '1.0';
   const pluginName = "SysInfo";
   const pluginHomepageUrl = "https://github.com/Highpoint2000/Sysinfo/releases";
   const pluginUpdateUrl = "https://raw.githubusercontent.com/highpoint2000/Sysinfo/main/SysInfo/sysinfo.js";
