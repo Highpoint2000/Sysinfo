@@ -22,7 +22,7 @@
   const pluginVersion = '1.0';
   const pluginName = "SysInfo";
   const pluginHomepageUrl = "https://github.com/Highpoint2000/Sysinfo/releases";
-  const pluginUpdateUrl = "https://raw.githubusercontent.com/highpoint2000/Sysinfo/main/SysInfo/sysinfo.js";
+  const pluginUpdateUrl = "https://raw.githubusercontent.com/highpoint2000/Sysinfo/main/Sysinfo/sysinfo.js";
 
   // WebSocket Setup
   const url = new URL(window.location.href);
@@ -50,6 +50,7 @@
       const isAdminLoggedIn =
           bodyText.includes("You are logged in as an administrator.") ||
           bodyText.includes("You are logged in as an adminstrator.");
+      
       isAdmin = !!isAdminLoggedIn;
       console.log(`[${pluginName}] Admin Mode: ${isAdmin}`);
   }
@@ -65,69 +66,57 @@
   }
 
   // ------------------------------------------------------------------
-  // Update Check Logic
+  // Update Check Logic (Identical to MetricsMonitor)
   // ------------------------------------------------------------------
   function checkUpdate(setupOnly, pluginName, urlUpdateLink, urlFetchLink) {
-    if (setupOnly && window.location.pathname !== '/setup') return;
+    const isSetupPath = (window.location.pathname || "/").indexOf("/setup") >= 0;
+    const ver = typeof pluginVersion !== "undefined" ? pluginVersion : "Unknown";
 
-    let pluginVersionCheck = typeof pluginVersion !== 'undefined' ? pluginVersion : typeof plugin_version !== 'undefined' ? plugin_version : typeof PLUGIN_VERSION !== 'undefined' ? PLUGIN_VERSION : 'Unknown';
+    fetch(urlFetchLink, { cache: "no-store" })
+        .then((r) => r.text())
+        .then((txt) => {
+            let remoteVer = "Unknown";
+            // Look for version string in remote file
+            const match = txt.match(/const\s+pluginVersion\s*=\s*['"]([^'"]+)['"]/);
+            if (match) remoteVer = match[1];
 
-    async function fetchFirstLine() {
-      const urlCheckForUpdate = urlFetchLink;
-      try {
-        const response = await fetch(urlCheckForUpdate);
-        if (!response.ok) {
-          throw new Error(`[${pluginName}] update check HTTP error! status: ${response.status}`);
-        }
-        const text = await response.text();
-        const lines = text.split('\n');
-        let version;
-        
-        if (lines.length > 2) {
-          const versionLine = lines.find(line => line.includes("const pluginVersion =") || line.includes("const plugin_version =") || line.includes("const PLUGIN_VERSION ="));
-          if (versionLine) {
-            const match = versionLine.match(/const\s+(?:pluginVersion|plugin_version|PLUGIN_VERSION)\s*=\s*['"]([^'"]+)['"]/);
-            if (match) version = match[1];
-          }
-        }
-        if (!version) {
-          const firstLine = lines[0].trim();
-          version = /^\d/.test(firstLine) ? firstLine : "Unknown";
-        }
-        return version;
-      } catch (error) {
-        console.error(`[${pluginName}] error fetching file:`, error);
-        return null;
-      }
-    }
-
-    fetchFirstLine().then(newVersion => {
-      if (newVersion && newVersion !== pluginVersionCheck) {
-        console.log(`[${pluginName}] Update available`);
-        setupNotify(pluginVersionCheck, newVersion, pluginName, urlUpdateLink);
-      }
-    });
-
-    function setupNotify(pluginVersionCheck, newVersion, pluginName, urlUpdateLink) {
-      if (window.location.pathname === '/setup') {
-        const pluginSettings = document.getElementById('plugin-settings');
-        if (pluginSettings) {
-          const currentText = pluginSettings.textContent.trim();
-          const newText = `<a href="${urlUpdateLink}" target="_blank">[${pluginName}] Update available: ${pluginVersionCheck} --> ${newVersion}</a><br>`;
-          if (currentText === 'No plugin settings are available.') {
-            pluginSettings.innerHTML = newText;
-          } else {
-            pluginSettings.innerHTML += ' ' + newText;
-          }
-        }
-        const updateIcon = document.querySelector('.wrapper-outer #navigation .sidenav-content .fa-puzzle-piece') || document.querySelector('.wrapper-outer .sidenav-content') || document.querySelector('.sidenav-content');
-        if (updateIcon) {
-            const redDot = document.createElement('span');
-            redDot.style.cssText = "display:block;width:12px;height:12px;border-radius:50%;background-color:#FE0830;margin-left:82px;margin-top:-12px;";
-            updateIcon.appendChild(redDot);
-        }
-      }
-    }
+            if (remoteVer !== "Unknown" && remoteVer !== ver) {
+                console.log(`[${pluginName}] Update available: ${ver} -> ${remoteVer}`);
+                
+                if (!setupOnly || isSetupPath) {
+                    // 1. Add Text to Plugin Settings (if in setup)
+                    const settings = document.getElementById("plugin-settings");
+                    if (settings) {
+                        settings.innerHTML += `<br><a href="${urlUpdateLink}" target="_blank">[${pluginName}] Update: ${ver} -> ${remoteVer}</a>`;
+                    }
+                    
+                    // 2. Add Red Dot to Navigation Icon
+                    const updateIcon =
+                        document.querySelector(".wrapper-outer #navigation .sidenav-content .fa-puzzle-piece") ||
+                        document.querySelector(".wrapper-outer .sidenav-content") ||
+                        document.querySelector(".sidenav-content");
+                    
+                    if (updateIcon) {
+                        // Prevent duplicate dots
+                        if (!updateIcon.querySelector(`.${pluginName}-update-dot`)) {
+                            const redDot = document.createElement("span");
+                            redDot.classList.add(`${pluginName}-update-dot`);
+                            redDot.style.cssText = `
+                                display: block;
+                                width: 12px;
+                                height: 12px;
+                                border-radius: 50%;
+                                background-color: #FE0830;
+                                margin-left: 82px;
+                                margin-top: -12px;
+                            `;
+                            updateIcon.appendChild(redDot);
+                        }
+                    }
+                }
+            }
+        })
+        .catch((e) => { console.error(`Update check for ${pluginName} failed`, e); });
   }
 
   if (CHECK_FOR_UPDATES) checkUpdate(pluginSetupOnlyNotify, pluginName, pluginHomepageUrl, pluginUpdateUrl);
@@ -243,6 +232,7 @@
         document.getElementById('sys-net-down').innerHTML = `<i class="fas fa-arrow-down" style="font-size:10px"></i> ${formatSpeed(data.netRx)}`;
         document.getElementById('sys-net-up').innerHTML = `<i class="fas fa-arrow-up" style="font-size:10px"></i> ${formatSpeed(data.netTx)}`;
         
+        // Only show IP address if user is Admin
         if (isAdmin) {
             netIpElement.style.display = 'block';
             netIpElement.textContent = data.netIp || '-';
