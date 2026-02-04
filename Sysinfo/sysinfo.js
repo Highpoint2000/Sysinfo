@@ -1,7 +1,7 @@
 (() => {
   ////////////////////////////////////////////////////////////////
   ///                                                          ///
-  ///  SYSINFO CLIENT SCRIPT FOR FM-DX-WEBSERVER (V1.0)        ///
+  ///  SYSINFO CLIENT SCRIPT FOR FM-DX-WEBSERVER (V1.1)        ///
   ///                                                          ///
   ///  by Highpoint                last update: 04.02.26       ///
   ///                                                          ///
@@ -19,10 +19,12 @@
   ///////////////////////////////////////////////////////////////
 
   // Plugin metadata
-  const pluginVersion = '1.0';
+  const pluginVersion = '1.1';
   const pluginName = "SysInfo";
   const pluginHomepageUrl = "https://github.com/Highpoint2000/Sysinfo/releases";
-  const pluginUpdateUrl = "https://raw.githubusercontent.com/highpoint2000/Sysinfo/main/Sysinfo/sysinfo.js";
+  
+  // RAW URL to the JS file for version checking
+  const pluginUpdateUrl = "https://raw.githubusercontent.com/highpoint2000/Sysinfo/main/SysInfo/sysinfo.js";
 
   // WebSocket Setup
   const url = new URL(window.location.href);
@@ -66,7 +68,7 @@
   }
 
   // ------------------------------------------------------------------
-  // Update Check Logic (Identical to MetricsMonitor)
+  // Update Check Logic
   // ------------------------------------------------------------------
   function checkUpdate(setupOnly, pluginName, urlUpdateLink, urlFetchLink) {
     const isSetupPath = (window.location.pathname || "/").indexOf("/setup") >= 0;
@@ -76,7 +78,6 @@
         .then((r) => r.text())
         .then((txt) => {
             let remoteVer = "Unknown";
-            // Look for version string in remote file
             const match = txt.match(/const\s+pluginVersion\s*=\s*['"]([^'"]+)['"]/);
             if (match) remoteVer = match[1];
 
@@ -84,20 +85,17 @@
                 console.log(`[${pluginName}] Update available: ${ver} -> ${remoteVer}`);
                 
                 if (!setupOnly || isSetupPath) {
-                    // 1. Add Text to Plugin Settings (if in setup)
                     const settings = document.getElementById("plugin-settings");
                     if (settings) {
                         settings.innerHTML += `<br><a href="${urlUpdateLink}" target="_blank">[${pluginName}] Update: ${ver} -> ${remoteVer}</a>`;
                     }
                     
-                    // 2. Add Red Dot to Navigation Icon
                     const updateIcon =
                         document.querySelector(".wrapper-outer #navigation .sidenav-content .fa-puzzle-piece") ||
                         document.querySelector(".wrapper-outer .sidenav-content") ||
                         document.querySelector(".sidenav-content");
                     
                     if (updateIcon) {
-                        // Prevent duplicate dots
                         if (!updateIcon.querySelector(`.${pluginName}-update-dot`)) {
                             const redDot = document.createElement("span");
                             redDot.classList.add(`${pluginName}-update-dot`);
@@ -170,31 +168,84 @@
     return `${d}d ${h}h ${m}m`;
   }
 
+  // Helper for Colors (Green -> Orange -> Red)
+  function getColorForPercentage(pct, warnThreshold, critThreshold) {
+      if (pct >= critThreshold) return '#ff5555'; // Red
+      if (pct >= warnThreshold) return '#ffa500'; // Orange
+      return '#4caf50'; // Green (default)
+  }
+
   function updateUI(data) {
     if (!data) return;
 
+    // RPi Throttling Warning
+    const warnIcon = document.getElementById('sysinfo-warn');
+    if (data.throttled) {
+        warnIcon.style.display = 'block';
+    } else {
+        warnIcon.style.display = 'none';
+    }
+
     // OS & Host
-    document.getElementById('sys-os').textContent = `${data.distro} (${data.platform})`;
+    document.getElementById('sys-os').textContent = `${data.distro}`;
     document.getElementById('sys-host').textContent = data.hostname;
     document.getElementById('sys-uptime').textContent = formatUptime(data.uptime);
 
-    // Total CPU
+    // Total CPU Load
+    const cpuVal = parseFloat(data.cpuLoad);
     document.getElementById('sys-cpu-val').textContent = `${data.cpuLoad}%`;
     document.getElementById('sys-cpu-bar').style.width = `${data.cpuLoad}%`;
-    const cpuBar = document.getElementById('sys-cpu-bar');
-    cpuBar.style.backgroundColor = data.cpuLoad > 80 ? '#ff5555' : (data.cpuLoad > 50 ? '#ffa500' : '#4caf50');
+    document.getElementById('sys-cpu-bar').style.backgroundColor = getColorForPercentage(cpuVal, 60, 85);
 
-    // Total Temp
+    // Total CPU Temp
+    const tempSection = document.getElementById('sys-temp-section');
     if (data.cpuTemp != -1) {
-        document.getElementById('sys-temp').textContent = `${parseFloat(data.cpuTemp).toFixed(1)}°C`;
+        // Show section if valid
+        tempSection.style.display = 'block';
+        
+        const temp = parseFloat(data.cpuTemp);
+        document.getElementById('sys-temp-val').textContent = `${temp.toFixed(1)}°C`;
+        
+        // Scale temp visually: 0-85°C
+        let tempPct = (temp / 85) * 100;
+        if (tempPct > 100) tempPct = 100;
+        document.getElementById('sys-temp-bar').style.width = `${tempPct}%`;
+        
+        // Colors: <60 (Green), 60-75 (Orange), >75 (Red)
+        const tempBar = document.getElementById('sys-temp-bar');
+        tempBar.style.backgroundColor = getColorForPercentage(temp, 60, 75);
     } else {
-        document.getElementById('sys-temp').textContent = '';
+        // Hide section on Windows (or if no sensor found)
+        tempSection.style.display = 'none';
     }
 
-    // Memory
+    // Memory Usage
+    const memVal = parseFloat(data.memPercent);
     document.getElementById('sys-mem-val').textContent = `${data.memPercent}%`;
     document.getElementById('sys-mem-text').textContent = `${formatBytes(data.memUsed)} / ${formatBytes(data.memTotal)}`;
     document.getElementById('sys-mem-bar').style.width = `${data.memPercent}%`;
+    
+    // Colors: <75 (Green), 75-90 (Orange), >90 (Red)
+    const memBar = document.getElementById('sys-mem-bar');
+    memBar.style.backgroundColor = getColorForPercentage(memVal, 75, 90);
+
+    // Disk Usage
+    const diskVal = parseFloat(data.diskPercent);
+    document.getElementById('sys-disk-val').textContent = `${data.diskPercent}%`;
+    document.getElementById('sys-disk-text').textContent = `${formatBytes(data.diskUsed)} / ${formatBytes(data.diskTotal)}`;
+    document.getElementById('sys-disk-bar').style.width = `${data.diskPercent}%`;
+    
+    // Colors: <80 (Green), 80-95 (Orange), >95 (Red)
+    const diskBar = document.getElementById('sys-disk-bar');
+    diskBar.style.backgroundColor = getColorForPercentage(diskVal, 80, 95);
+    
+    // Dynamic Label (C: or /)
+    // If distro is windows, assume C: if not explicitly provided otherwise by backend, 
+    // but usually user just wants to see "Disk"
+    let diskLabel = "Disk";
+    if (data.platform === "win32" || data.platform === "windows") diskLabel = "Disk (C:)";
+    else diskLabel = "Disk:";
+    document.getElementById('sys-disk-label').textContent = diskLabel;
 
     // Core Data
     const coresContainer = document.getElementById('sys-cores-container');
@@ -207,7 +258,9 @@
             row.className = 'sys-core-row';
             
             const tempStr = core.temp ? `<span style="color:#aaa; font-size:10px; margin-right:5px;">${core.temp}°C</span>` : '';
-            const color = core.load > 80 ? '#ff5555' : (core.load > 50 ? '#ffa500' : '#4caf50');
+            const coreLoad = parseFloat(core.load);
+            // Cores: <60 (Green), 60-85 (Orange), >85 (Red)
+            const color = getColorForPercentage(coreLoad, 60, 85);
 
             row.innerHTML = `
                 <div style="display:flex; justify-content:space-between; font-size:10px; margin-bottom:1px;">
@@ -256,8 +309,18 @@
     #sysinfo-header {
       background: rgba(255,255,255,0.1); padding: 8px 10px;
       border-bottom: 1px solid #444; font-weight: bold;
-      border-radius: 8px 8px 0 0; display:flex; justify-content:space-between;
+      border-radius: 8px 8px 0 0; display:flex; justify-content:space-between; align-items:center;
     }
+    #sysinfo-close {
+        cursor: pointer; font-weight: bold; color: #ccc; font-size: 18px; line-height: 1; padding: 0 4px; margin-right: -6px;
+    }
+    #sysinfo-close:hover { color: #fff; }
+    
+    #sysinfo-warn {
+        display:none; color: #ff5555; margin-right: 10px; font-size: 14px; animation: sys-blink 1s infinite;
+    }
+    @keyframes sys-blink { 50% { opacity: 0.5; } }
+    
     #sysinfo-content { padding: 10px; display:flex; flex-direction:column; gap:8px; }
     .sys-row { display:flex; justify-content:space-between; margin-bottom: 2px;}
     .sys-label { color: #aaa; }
@@ -294,7 +357,13 @@
   const overlay = document.createElement('div');
   overlay.id = 'sysinfo-overlay';
   overlay.innerHTML = `
-    <div id="sysinfo-header"><span>System Monitor</span></div>
+    <div id="sysinfo-header">
+        <div style="display:flex; align-items:center;">
+            <span>System Monitor</span>
+            <i id="sysinfo-warn" class="fas fa-bolt" title="Undervoltage / Throttling detected!"></i>
+        </div>
+        <span id="sysinfo-close" title="Close">&times;</span>
+    </div>
     <div id="sysinfo-content">
       
       <div class="sys-group">
@@ -312,14 +381,20 @@
                 <i id="sys-cpu-toggle" class="fas fa-caret-down sys-toggle" title="Show/Hide Cores"></i>
                 <span class="sys-label" style="margin-left:4px;">CPU Load:</span>
             </span> 
-            <span>
-                <span id="sys-temp" style="color:#aaa; font-size:11px; margin-right:5px"></span> 
-                <span id="sys-cpu-val" class="sys-val">0%</span>
-            </span>
+            <span id="sys-cpu-val" class="sys-val">0%</span>
         </div>
         <div class="sys-bar-bg"><div id="sys-cpu-bar" class="sys-bar-fill"></div></div>
         
         <div id="sys-cores-container"></div>
+      </div>
+
+      <!-- CPU Temp Section (ID added for toggling) -->
+      <div id="sys-temp-section" class="sys-group" style="margin-top:5px;">
+        <div class="sys-row">
+            <span class="sys-label">CPU Temp:</span> 
+            <span id="sys-temp-val" class="sys-val">0°C</span>
+        </div>
+        <div class="sys-bar-bg"><div id="sys-temp-bar" class="sys-bar-fill" style="background:#2196F3"></div></div>
       </div>
 
       <!-- RAM Section -->
@@ -330,6 +405,16 @@
         </div>
         <div class="sys-bar-bg"><div id="sys-mem-bar" class="sys-bar-fill" style="background:#2196F3"></div></div>
         <div style="text-align:right; font-size:10px; color:#888; margin-top:2px;" id="sys-mem-text">- / -</div>
+      </div>
+
+      <!-- Disk Section -->
+      <div class="sys-group" style="margin-top:5px;">
+        <div class="sys-row">
+            <span id="sys-disk-label" class="sys-label">Disk:</span> 
+            <span id="sys-disk-val" class="sys-val">0%</span>
+        </div>
+        <div class="sys-bar-bg"><div id="sys-disk-bar" class="sys-bar-fill" style="background:#9c27b0"></div></div>
+        <div style="text-align:right; font-size:10px; color:#888; margin-top:2px;" id="sys-disk-text">- / -</div>
       </div>
       
       <!-- Network Section -->
@@ -343,8 +428,8 @@
             <div style="font-size:11px; color:#ccc; margin-bottom:4px;" id="sys-net-ip">-</div>
             
             <div class="sys-net-box">
-                <span style="color:#4caf50" id="sys-net-down">↓ 0 B/s</span>
-                <span style="color:#2196F3" id="sys-net-up">↑ 0 B/s</span>
+                <span style="color:white" id="sys-net-down">↓ 0 B/s</span>
+                <span style="color:white" id="sys-net-up">↑ 0 B/s</span>
             </div>
           </div>
       </div>
@@ -353,17 +438,20 @@
   `;
   document.body.appendChild(overlay);
 
+  // Close Button Logic
+  document.getElementById('sysinfo-close').addEventListener('click', () => {
+      $('#sysinfo-overlay').stop(true, true).fadeOut(400);
+      const btn = document.getElementById('SysInfo-on-off');
+      if (btn) btn.classList.remove('active');
+  });
+
   // Toggle Logic with instant update
   const toggleBtn = document.getElementById('sys-cpu-toggle');
   toggleBtn.addEventListener('click', () => {
       showCores = !showCores;
       if (showCores) toggleBtn.classList.add('open');
       else toggleBtn.classList.remove('open');
-      
-      // Update UI immediately with cached data
-      if (lastData) {
-          updateUI(lastData);
-      }
+      if (lastData) updateUI(lastData);
   });
 
   // Position defaults
@@ -376,7 +464,7 @@
   (function () {
     let dragging = false, sx, sy, ox, oy;
     overlay.addEventListener('mousedown', e => {
-      if (e.target.id === 'sys-cpu-toggle') return;
+      if (e.target.id === 'sys-cpu-toggle' || e.target.id === 'sysinfo-close') return;
       dragging = true;
       sx = e.clientX; sy = e.clientY;
       const r = overlay.getBoundingClientRect();
@@ -398,7 +486,6 @@
 
   // --- Toolbar Button ---
   (function () {
-    // Only create button if Admin or if restriction is disabled
     if (RestrictButtonToAdmin && !isAdmin) return;
 
     const btnId = 'SysInfo-on-off';
@@ -421,9 +508,14 @@
             
             $btn.on('click', () => {
               active = !active;
-              $btn.toggleClass('active', active);
-              if (active) $('#sysinfo-overlay').stop(true, true).fadeIn(400);
-              else $('#sysinfo-overlay').stop(true, true).fadeOut(400);
+              const overlayVisible = $('#sysinfo-overlay').is(':visible');
+              if (!overlayVisible) {
+                  $btn.addClass('active');
+                  $('#sysinfo-overlay').stop(true, true).fadeIn(400);
+              } else {
+                  $btn.removeClass('active');
+                  $('#sysinfo-overlay').stop(true, true).fadeOut(400);
+              }
             });
           }
         });

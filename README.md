@@ -4,16 +4,14 @@ This plugin displays relevant system data on the web interface.
 <img width="1443" height="833" alt="image" src="https://github.com/user-attachments/assets/508b5a2c-c623-4ead-ba59-c847d8870469" />
 
 
-## Version 1.0
+## Version 1.1
 
-Information on:
-- System name, OS and uptime
-- Total CPU and individual core utilization including temperature
-- Memory utilization
-- Network information (IP adress only for admins)
+- Added X to close window
+- Added CPU temperature level meter (Linux only)
+- Added primary drive storage space indicator
+- Color gradation (green, orange, red) now applies to all bars
 
-The plugin can be configured client-side so that only administrators have access to it.
-
+The plugin can be configured client-side so that only administrators have access to it. Don't forget to restart your computer after activating the plugin!
 ## Installation notes:
 
 1. [Download](https://github.com/Highpoint2000/Syslog/releases) the last repository as a zip
@@ -37,6 +35,7 @@ The following variables can be changed in the sysinfo.js:
 - The IP address of the interface used is only displayed to logged-in users
 - You can freely move the window on the web interface using drag and drop
 - The small triangle next to CPU Load displays the utilization of individual cores
+- Displaying the CPU temperature level is only supported on Linux devices
 
 ## Contact
 
@@ -46,3 +45,11 @@ If you have any questions, would like to report problems, or have suggestions fo
 
 <details>
 <summary>History</summary>
+
+### Version 1.0
+
+Information on:
+- System name, OS and uptime
+- Total CPU and individual core utilization including temperature
+- Memory utilization
+- Network information (IP adress only for admins)
