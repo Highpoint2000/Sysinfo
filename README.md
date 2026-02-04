@@ -22,7 +22,7 @@ The plugin can be configured client-side so that only administrators have access
 4. Start/Restart the fm-dx-webserver with "npm run webserver" on node.js console, check the console informations
 5. Activate the sysinfo plugin in the settings
 6. Stop or close the fm-dx-webserver
-7. Start/Restart the fm-dx-webserver with "npm run webserver" on node.js console, check the console informations
+7. Start/Restart the fm-dx-webserver with "npm run webserver" (Important for the automatic installation of the Node.js module for system information!), check the console informations on node.js console
 
 ## Configuration options:
 
