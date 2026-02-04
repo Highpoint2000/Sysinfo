@@ -24,7 +24,7 @@
   const pluginHomepageUrl = "https://github.com/Highpoint2000/Sysinfo/releases";
   
   // RAW URL to the JS file for version checking
-  const pluginUpdateUrl = "https://raw.githubusercontent.com/highpoint2000/Sysinfo/main/SysInfo/sysinfo.js";
+  const pluginUpdateUrl = "https://raw.githubusercontent.com/highpoint2000/Sysinfo/main/Sysinfo/sysinfo.js";
 
   // WebSocket Setup
   const url = new URL(window.location.href);
@@ -68,13 +68,19 @@
   }
 
   // ------------------------------------------------------------------
-  // Update Check Logic
+  // Update Check Logic (Robust Version)
+  // ------------------------------------------------------------------
+  // ------------------------------------------------------------------
+  // Update Check Logic (Original MetricsMonitor Style)
   // ------------------------------------------------------------------
   function checkUpdate(setupOnly, pluginName, urlUpdateLink, urlFetchLink) {
     const isSetupPath = (window.location.pathname || "/").indexOf("/setup") >= 0;
     const ver = typeof pluginVersion !== "undefined" ? pluginVersion : "Unknown";
 
-    fetch(urlFetchLink, { cache: "no-store" })
+    // Add timestamp to prevent caching
+    const cleanUrl = urlFetchLink + '?t=' + new Date().getTime();
+
+    fetch(cleanUrl, { cache: "no-store" })
         .then((r) => r.text())
         .then((txt) => {
             let remoteVer = "Unknown";
@@ -85,11 +91,15 @@
                 console.log(`[${pluginName}] Update available: ${ver} -> ${remoteVer}`);
                 
                 if (!setupOnly || isSetupPath) {
+                    // 1. Add Text to Plugin Settings
                     const settings = document.getElementById("plugin-settings");
                     if (settings) {
-                        settings.innerHTML += `<br><a href="${urlUpdateLink}" target="_blank">[${pluginName}] Update: ${ver} -> ${remoteVer}</a>`;
+                        if (!settings.innerHTML.includes(urlUpdateLink)) {
+                             settings.innerHTML += `<br><a href="${urlUpdateLink}" target="_blank">[${pluginName}] Update: ${ver} -> ${remoteVer}</a>`;
+                        }
                     }
                     
+                    // 2. Add Red Dot to Navigation Icon
                     const updateIcon =
                         document.querySelector(".wrapper-outer #navigation .sidenav-content .fa-puzzle-piece") ||
                         document.querySelector(".wrapper-outer .sidenav-content") ||
@@ -114,7 +124,7 @@
                 }
             }
         })
-        .catch((e) => { console.error(`Update check for ${pluginName} failed`, e); });
+        .catch((e) => { console.warn(`[${pluginName}] Update check failed`, e); });
   }
 
   if (CHECK_FOR_UPDATES) checkUpdate(pluginSetupOnlyNotify, pluginName, pluginHomepageUrl, pluginUpdateUrl);
