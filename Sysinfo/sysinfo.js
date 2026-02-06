@@ -1,9 +1,9 @@
 (() => {
   ////////////////////////////////////////////////////////////////
   ///                                                          ///
-  ///  SYSINFO CLIENT SCRIPT FOR FM-DX-WEBSERVER (V1.1)        ///
+  ///  SYSINFO CLIENT SCRIPT FOR FM-DX-WEBSERVER (V1.2)        ///
   ///                                                          ///
-  ///  by Highpoint                last update: 04.02.26       ///
+  ///  by Highpoint                last update: 06.02.26       ///
   ///                                                          ///
   ///  https://github.com/Highpoint2000/Sysinfo                ///
   ///                                                          ///
@@ -19,7 +19,7 @@
   ///////////////////////////////////////////////////////////////
 
   // Plugin metadata
-  const pluginVersion = '1.1';
+  const pluginVersion = '1.2';
   const pluginName = "SysInfo";
   const pluginHomepageUrl = "https://github.com/Highpoint2000/Sysinfo/releases";
   

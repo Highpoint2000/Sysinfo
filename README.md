@@ -3,16 +3,12 @@ This plugin displays relevant system data on the web interface.
 
 <img width="1446" height="832" alt="image" src="https://github.com/user-attachments/assets/23723773-30ed-469a-8cdd-41a27463c35b" />
 
+## Version 1.2
 
-
-## Version 1.1
-
-- Added X to close window
-- Added CPU temperature level meter (Linux only)
-- Added primary drive storage space indicator
-- Color gradation (green, orange, red) now applies to all bars
+- CPU load under Windows significantly reduced
 
 The plugin can be configured client-side so that only administrators have access to it. Don't forget to restart your computer after activating the plugin!
+
 ## Installation notes:
 
 1. [Download](https://github.com/Highpoint2000/Syslog/releases) the last repository as a zip
@@ -46,6 +42,13 @@ If you have any questions, would like to report problems, or have suggestions fo
 
 <details>
 <summary>History</summary>
+
+### Version 1.1
+
+- Added X to close window
+- Added CPU temperature level meter (Linux only)
+- Added primary drive storage space indicator
+- Color gradation (green, orange, red) now applies to all bars
 
 ### Version 1.0
 

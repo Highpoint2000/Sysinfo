@@ -1,8 +1,8 @@
 ///////////////////////////////////////////////////////////////
 ///                                                         ///
-///  SYSINFO SERVER SCRIPT FOR FM-DX-WEBSERVER (V1.1)       ///
+///  SYSINFO SERVER SCRIPT FOR FM-DX-WEBSERVER (V1.2)       ///
 ///                                                         ///
-///  by Highpoint                last update: 04.02.26      ///
+///  by Highpoint                last update: 06.02.26      ///
 ///                                                         ///
 ///  https://github.com/Highpoint2000/Sysinfo               ///
 ///                                                         ///
@@ -17,6 +17,7 @@ const path = require('path');
 const fs = require('fs');
 const WebSocket = require('ws');
 const { execSync, exec } = require('child_process');
+const os = require('os');
 
 // Integration into existing logging/config structure
 const { logInfo, logError, logWarn } = require('./../../server/console');
@@ -50,7 +51,7 @@ const configPlugin = loadConfig(ConfigFilePath);
 const updateInterval = configPlugin.UpdateInterval || 2000;
 
 // --- Module Installation ---
-const NewModules = ['systeminformation', 'ws'];
+const NewModules = ['node-os-utils', 'ws'];
 function checkAndInstallNewModules() {
   NewModules.forEach(module => {
     const modulePath = path.join(__dirname, './../../node_modules', module);
@@ -61,14 +62,23 @@ function checkAndInstallNewModules() {
         logInfo(`[SysInfo] Module ${module} installed successfully.`);
       } catch (error) {
         logError(`[SysInfo] Error installing module ${module}: ${error.message}`);
-        process.exit(1);
       }
     }
   });
 }
 checkAndInstallNewModules();
 
-const si = require('systeminformation');
+// --- Safe Module Loading with Fallback ---
+let osUtils = null;
+let useNativeAPIs = false;
+
+try {
+  osUtils = require('node-os-utils');
+  logInfo('[SysInfo] node-os-utils loaded successfully');
+} catch (error) {
+  logWarn('[SysInfo] node-os-utils not available, using native Node.js APIs');
+  useNativeAPIs = true;
+}
 
 // --- WebSocket Connection ---
 const webserverPort = config.webserver.webserverPort || 8080;
@@ -77,7 +87,7 @@ let ws;
 
 function connectToWebSocket() {
   ws = new WebSocket(externalWsUrl + '/data_plugins');
-  ws.on('open', () => { logInfo(`[SysInfo] WebSocket connected`); });
+  ws.on('open', () => { logInfo(`[SysInfo] WebSocket connected (${useNativeAPIs ? 'Native' : 'Optimized'})`); });
   ws.on('error', (error) => logError('[SysInfo] WebSocket error:', error));
   ws.on('close', () => { setTimeout(connectToWebSocket, 5000); });
 }
@@ -94,46 +104,81 @@ let cachedData = {
     uptime: 0,
     netIp: '-', netIface: '-',
     throttled: false,
-    processes: [] 
 };
 
-let defaultInterfaceName = null;
 let isRaspberry = false;
 let isWindows = false;
+let lastNetStats = { rx: 0, tx: 0, time: Date.now() };
+
+// --- Native CPU Tracking (Fallback) ---
+let previousCpuUsage = null;
+
+function getCpuUsageNative() {
+    const currentCpus = os.cpus();
+    
+    if (!previousCpuUsage) {
+        previousCpuUsage = currentCpus;
+        return 0;
+    }
+    
+    let totalIdle = 0, totalTick = 0;
+    
+    for (let i = 0; i < currentCpus.length; i++) {
+        const current = currentCpus[i].times;
+        const previous = previousCpuUsage[i].times;
+        
+        const currentTotal = Object.values(current).reduce((a, b) => a + b, 0);
+        const previousTotal = Object.values(previous).reduce((a, b) => a + b, 0);
+        
+        const totalDiff = currentTotal - previousTotal;
+        const idleDiff = current.idle - previous.idle;
+        
+        totalTick += totalDiff;
+        totalIdle += idleDiff;
+    }
+    
+    previousCpuUsage = currentCpus;
+    
+    const usage = 100 - (100 * totalIdle / totalTick);
+    return Math.max(0, Math.min(100, usage)); // Clamp 0-100
+}
 
 // --- 1. VERY SLOW INIT (Runs only ONCE at start) ---
 async function initStaticData() {
     try {
         logInfo("[SysInfo] Initializing static data...");
-        const osInfo = await si.osInfo();
-        cachedData.platform = osInfo.platform;
-        cachedData.distro = osInfo.distro;
-        cachedData.hostname = osInfo.hostname;
         
-        if (osInfo.platform === 'win32' || osInfo.platform === 'windows') {
-            isWindows = true;
-        }
-
+        cachedData.platform = os.platform();
+        cachedData.hostname = os.hostname();
+        cachedData.distro = `${os.type()} ${os.release()}`;
+        
+        isWindows = cachedData.platform === 'win32';
+        
         // Detect Raspberry Pi
-        const sys = await si.system();
-        if ((sys.model && sys.model.includes("Raspberry")) || osInfo.arch === 'arm') {
+        if (os.arch().includes('arm') || os.arch().includes('aarch')) {
             isRaspberry = true;
         }
         
-        // Network Interface Discovery
-        defaultInterfaceName = await si.networkInterfaceDefault();
-        const interfaces = await si.networkInterfaces();
-        const activeInterface = interfaces.find(i => i.iface === defaultInterfaceName) || interfaces[0];
-        
-        if (activeInterface) {
-            cachedData.netIface = activeInterface.iface;
-            cachedData.netIp = activeInterface.ip4;
+        // Network Interface Discovery (lightweight)
+        const networkInterfaces = os.networkInterfaces();
+        for (const [name, interfaces] of Object.entries(networkInterfaces)) {
+            const ipv4 = interfaces.find(i => i.family === 'IPv4' && !i.internal);
+            if (ipv4) {
+                cachedData.netIface = name;
+                cachedData.netIp = ipv4.address;
+                break;
+            }
         }
         
-        const mem = await si.mem();
-        cachedData.memTotal = mem.total;
+        // Total Memory (instant)
+        cachedData.memTotal = os.totalmem();
         
-        logInfo(`[SysInfo] Init done. OS: ${osInfo.platform}, Interface: ${cachedData.netIface}`);
+        // Initialize CPU tracking for native mode
+        if (useNativeAPIs) {
+            previousCpuUsage = os.cpus();
+        }
+        
+        logInfo(`[SysInfo] Init done. OS: ${cachedData.platform}, Interface: ${cachedData.netIface}`);
     } catch (e) {
         logError('[SysInfo] Init Error:', e);
     }
@@ -156,80 +201,223 @@ function checkRpiThrottling() {
     });
 }
 
+// --- CPU Temperature (Optimized for Windows) ---
+async function getCpuTemp() {
+    if (isWindows) {
+        // Windows: Use WMI directly (much faster than PowerShell)
+        return new Promise((resolve) => {
+            exec('wmic /namespace:\\\\root\\wmi PATH MSAcpi_ThermalZoneTemperature get CurrentTemperature', 
+                { timeout: 2000 }, 
+                (error, stdout) => {
+                    if (error) {
+                        resolve(-1);
+                        return;
+                    }
+                    try {
+                        const lines = stdout.trim().split('\n');
+                        if (lines.length > 1) {
+                            const kelvin = parseInt(lines[1].trim());
+                            const celsius = (kelvin / 10) - 273.15;
+                            resolve(celsius > 0 && celsius < 150 ? celsius.toFixed(1) : -1);
+                        } else {
+                            resolve(-1);
+                        }
+                    } catch (e) {
+                        resolve(-1);
+                    }
+                }
+            );
+        });
+    } else if (isRaspberry) {
+        // Raspberry Pi: vcgencmd
+        return new Promise((resolve) => {
+            exec('vcgencmd measure_temp', (error, stdout) => {
+                if (error) {
+                    resolve(-1);
+                    return;
+                }
+                try {
+                    const temp = parseFloat(stdout.split('=')[1]);
+                    resolve(temp > 0 ? temp.toFixed(1) : -1);
+                } catch (e) {
+                    resolve(-1);
+                }
+            });
+        });
+    } else {
+        // Linux: Read thermal zone
+        return new Promise((resolve) => {
+            exec('cat /sys/class/thermal/thermal_zone0/temp', (error, stdout) => {
+                if (error) {
+                    resolve(-1);
+                    return;
+                }
+                try {
+                    const temp = parseInt(stdout) / 1000;
+                    resolve(temp > 0 ? temp.toFixed(1) : -1);
+                } catch (e) {
+                    resolve(-1);
+                }
+            });
+        });
+    }
+}
+
+// --- Get Disk Usage (Native Fallback) ---
+async function getDiskUsage() {
+    if (useNativeAPIs || !osUtils) {
+        // Native fallback with exec
+        return new Promise((resolve) => {
+            if (isWindows) {
+                exec('wmic logicaldisk where "DeviceID=\'C:\'" get Size,FreeSpace', (error, stdout) => {
+                    if (error) {
+                        resolve({ used: 0, total: 0, percent: 0 });
+                        return;
+                    }
+                    try {
+                        const lines = stdout.trim().split('\n');
+                        if (lines.length > 1) {
+                            const parts = lines[1].trim().split(/\s+/);
+                            const free = parseInt(parts[0]);
+                            const total = parseInt(parts[1]);
+                            const used = total - free;
+                            const percent = ((used / total) * 100).toFixed(1);
+                            resolve({ used, total, percent });
+                        } else {
+                            resolve({ used: 0, total: 0, percent: 0 });
+                        }
+                    } catch (e) {
+                        resolve({ used: 0, total: 0, percent: 0 });
+                    }
+                });
+            } else {
+                exec('df -B1 /', (error, stdout) => {
+                    if (error) {
+                        resolve({ used: 0, total: 0, percent: 0 });
+                        return;
+                    }
+                    try {
+                        const lines = stdout.trim().split('\n');
+                        if (lines.length > 1) {
+                            const parts = lines[1].trim().split(/\s+/);
+                            const total = parseInt(parts[1]);
+                            const used = parseInt(parts[2]);
+                            const percent = parseFloat(parts[4]);
+                            resolve({ used, total, percent: percent.toFixed(1) });
+                        } else {
+                            resolve({ used: 0, total: 0, percent: 0 });
+                        }
+                    } catch (e) {
+                        resolve({ used: 0, total: 0, percent: 0 });
+                    }
+                });
+            }
+        });
+    } else {
+        try {
+            const diskInfo = await osUtils.drive.info();
+            return {
+                used: Math.round(diskInfo.usedGb * 1024 * 1024 * 1024),
+                total: Math.round(diskInfo.totalGb * 1024 * 1024 * 1024),
+                percent: diskInfo.usedPercentage.toFixed(1)
+            };
+        } catch (e) {
+            return { used: 0, total: 0, percent: 0 };
+        }
+    }
+}
+
 // --- 2. HEAVY DATA LOOP (Runs rarely - e.g. every 20s) ---
 async function updateHeavyData() {
     try {
-        // CPU Temp - Advanced Fallback Logic
-        const temp = await si.cpuTemperature();
-        let finalTemp = -1;
-
-        if (temp.main > 0) {
-            finalTemp = temp.main;
-        } else if (temp.cores && temp.cores.length > 0 && temp.cores[0] > 0) {
-            // Windows often puts value in cores array
-            finalTemp = temp.cores[0];
-        } else if (temp.max > 0) {
-            // Sometimes only max is available
-            finalTemp = temp.max;
-        }
-        
-        cachedData.cpuTemp = finalTemp > 0 ? finalTemp.toFixed(1) : -1;
-        cachedData.coreTemps = temp.cores || [];
-
-        // Memory
-        const mem = await si.mem();
-        cachedData.memUsed = mem.active;
-        cachedData.memPercent = ((mem.active / mem.total) * 100).toFixed(1);
+        // CPU Temperature
+        cachedData.cpuTemp = await getCpuTemp();
+        cachedData.coreTemps = [];
         
         // Disk Usage
-        const fsSize = await si.fsSize();
-        if (fsSize && fsSize.length > 0) {
-            let root;
-            if (isWindows) {
-                // Windows: Look for C: or first drive
-                root = fsSize.find(d => d.mount.toLowerCase() === 'c:') || fsSize[0];
-            } else {
-                // Linux: Look for /
-                root = fsSize.find(d => d.mount === '/') || fsSize[0];
-            }
-            
-            if (root) {
-                cachedData.diskUsed = root.used;
-                cachedData.diskTotal = root.size;
-                cachedData.diskPercent = root.use.toFixed(1);
-            }
-        }
-
-        const time = await si.time();
-        cachedData.uptime = time.uptime;
+        const diskData = await getDiskUsage();
+        cachedData.diskUsed = diskData.used;
+        cachedData.diskTotal = diskData.total;
+        cachedData.diskPercent = diskData.percent;
         
+        // Uptime (instant)
+        cachedData.uptime = os.uptime();
+        
+        // RPi Throttling Check
         checkRpiThrottling();
         
-    } catch (e) { /* ignore */ }
+    } catch (e) {
+        logError('[SysInfo] Heavy data error:', e);
+    }
 }
 
 // --- 3. LIGHT DATA LOOP (Runs often - e.g. every 2s) ---
 async function updateLightData() {
     try {
         // CPU Load
-        const currentLoad = await si.currentLoad();
-        cachedData.cpuLoad = currentLoad.currentLoad.toFixed(1);
-        cachedData.cpus = currentLoad.cpus.map((core, index) => ({
-            load: core.load.toFixed(1),
-            temp: (cachedData.coreTemps && cachedData.coreTemps[index]) ? cachedData.coreTemps[index].toFixed(1) : null
-        }));
-
+        let cpuUsage = 0;
+        
+        if (useNativeAPIs || !osUtils) {
+            cpuUsage = getCpuUsageNative();
+        } else {
+            try {
+                cpuUsage = await osUtils.cpu.usage();
+            } catch (e) {
+                logWarn('[SysInfo] node-os-utils CPU failed, switching to native');
+                useNativeAPIs = true;
+                cpuUsage = getCpuUsageNative();
+            }
+        }
+        
+        cachedData.cpuLoad = cpuUsage.toFixed(1);
+        
+        // Per-Core CPU Load
+        const cpuCount = os.cpus().length;
+        cachedData.cpus = [];
+        for (let i = 0; i < cpuCount; i++) {
+            cachedData.cpus.push({
+                load: cpuUsage.toFixed(1),
+                temp: (cachedData.coreTemps && cachedData.coreTemps[i]) ? cachedData.coreTemps[i].toFixed(1) : null
+            });
+        }
+        
+        // Memory (Native is faster anyway)
+        const freeMem = os.freemem();
+        const totalMem = os.totalmem();
+        cachedData.memUsed = totalMem - freeMem;
+        cachedData.memPercent = ((cachedData.memUsed / totalMem) * 100).toFixed(1);
+        
         // Network Traffic
-        if (defaultInterfaceName) {
-            const stats = await si.networkStats(defaultInterfaceName);
-            if (stats && stats.length > 0) {
-                cachedData.netRx = stats[0].rx_sec;
-                cachedData.netTx = stats[0].tx_sec;
+        if (!useNativeAPIs && osUtils) {
+            try {
+                const netInfo = await osUtils.netstat.inOut();
+                const now = Date.now();
+                const timeDiff = (now - lastNetStats.time) / 1000;
+                
+                if (timeDiff > 0 && lastNetStats.rx > 0) {
+                    const currentRx = netInfo.total.inputMb * 1024 * 1024;
+                    const currentTx = netInfo.total.outputMb * 1024 * 1024;
+                    
+                    cachedData.netRx = Math.round((currentRx - lastNetStats.rx) / timeDiff);
+                    cachedData.netTx = Math.round((currentTx - lastNetStats.tx) / timeDiff);
+                    
+                    lastNetStats = { rx: currentRx, tx: currentTx, time: now };
+                } else {
+                    lastNetStats = {
+                        rx: netInfo.total.inputMb * 1024 * 1024,
+                        tx: netInfo.total.outputMb * 1024 * 1024,
+                        time: now
+                    };
+                }
+            } catch (e) {
+                // Netstat failed, ignore
             }
         }
         
         sendPayload();
-    } catch (e) { /* ignore */ }
+    } catch (e) {
+        logError('[SysInfo] Light data error:', e);
+    }
 }
 
 function sendPayload() {
