@@ -23,7 +23,7 @@ const config = require('./../../config.json');
 // Default Configuration
 const defaultConfig = {
   UpdateInterval: 2000,         // 2 seconds default
-  RestrictButtonToAdmin: false  // Button visibility restriction
+  RestrictButtonToAdmin: true  // Button visibility restriction
 };
 
 // --- Config Loading ---
