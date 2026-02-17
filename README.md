@@ -6,7 +6,7 @@ This plugin displays relevant system data on the web interface.
 ## Version 1.3
 
 - Storage capacity display now only visible to administrators
-- Enabling the Sysinfo button for administrators is now available as a fixed setting in the sysinfo.json file located in the \plugin_configs folder
+- Enabling the Sysinfo button for all users is now available as a fixed setting in the sysinfo.json file located in the \plugin_configs folder
 
 ## Installation notes:
 
@@ -22,8 +22,8 @@ This plugin displays relevant system data on the web interface.
 
 The following variables can be changed in the sysinfo.json:
 
-  "UpdateInterval": 2000,          // Configure the update interval here (default is 2000)
-  "RestrictButtonToAdmin": false   // Set it to true if the system info button should only be accessible to administrators (default is false) 
+    "UpdateInterval": 2000,          // Configure the update interval here (default is 2000)
+    "RestrictButtonToAdmin": true   // Set it to false if the system info button should be accessible for all users (default is true) 
 
 ## Notes: 
 
