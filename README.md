@@ -3,11 +3,10 @@ This plugin displays relevant system data on the web interface.
 
 <img width="1446" height="832" alt="image" src="https://github.com/user-attachments/assets/23723773-30ed-469a-8cdd-41a27463c35b" />
 
-## Version 1.2
+## Version 1.3
 
-- CPU load under Windows significantly reduced
-
-The plugin can be configured client-side so that only administrators have access to it. Don't forget to restart your computer after activating the plugin!
+- Storage capacity display now only visible to administrators
+- Enabling the Sysinfo button for administrators is now available as a fixed setting in the sysinfo.json file located in the \plugin_configs folder
 
 ## Installation notes:
 
@@ -21,18 +20,18 @@ The plugin can be configured client-side so that only administrators have access
 
 ## Configuration options:
 
-The following variables can be changed in the sysinfo.js:
+The following variables can be changed in the sysinfo.json:
 
-    RestrictButtonToAdmin = false; // Set this setting to true, the Sysinfo button will only be displayed to authorized users (deafult = false)
-    pluginSetupOnlyNotify = true;  // If true (default): The notification of an available update (the red dot and text) will only be displayed if you are on the configuration page (/setup)
-    CHECK_FOR_UPDATES = true;	   // You can disable the update check by typing false (default = true)
+  "UpdateInterval": 2000,          // Configure the update interval here (default is 2000)
+  "RestrictButtonToAdmin": false   // Set it to true if the system info button should only be accessible to administrators (default is false) 
 
 ## Notes: 
 
-- The IP address of the interface used is only displayed to logged-in users
+- The IP address and storage capacity of the interface used is only displayed to logged-in users
 - You can freely move the window on the web interface using drag and drop
 - The small triangle next to CPU Load displays the utilization of individual cores
 - Displaying the CPU temperature level is only supported on Linux devices
+- In the settings, you can restrict access to only administrators
 
 ## Contact
 
@@ -42,6 +41,12 @@ If you have any questions, would like to report problems, or have suggestions fo
 
 <details>
 <summary>History</summary>
+
+### Version 1.2
+
+- CPU load under Windows significantly reduced
+
+The plugin can be configured client-side so that only administrators have access to it. Don't forget to restart your computer after activating the plugin!
 
 ### Version 1.1
 

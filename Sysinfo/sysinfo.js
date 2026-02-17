@@ -1,16 +1,13 @@
 (() => {
   ////////////////////////////////////////////////////////////////
   ///                                                          ///
-  ///  SYSINFO CLIENT SCRIPT FOR FM-DX-WEBSERVER (V1.2)        ///
+  ///  SYSINFO CLIENT SCRIPT FOR FM-DX-WEBSERVER (V1.3)        ///
   ///                                                          ///
-  ///  by Highpoint                last update: 06.02.26       ///
+  ///  by Highpoint                last update: 17.02.26       ///
   ///                                                          ///
   ///  https://github.com/Highpoint2000/Sysinfo                ///
   ///                                                          ///
   ////////////////////////////////////////////////////////////////
- 
-  // ------------- Admin Configuration ----------------
-  const RestrictButtonToAdmin = false; 
   
   // ------------- Update Configuration ----------------
   const pluginSetupOnlyNotify = true;
@@ -18,8 +15,11 @@
 
   ///////////////////////////////////////////////////////////////
 
+  // ------------- Admin Configuration ----------------
+  const RestrictButtonToAdmin = true;  // Do not touch - this value is automatically updated via the config file
+
   // Plugin metadata
-  const pluginVersion = '1.2';
+  const pluginVersion = '1.3';
   const pluginName = "SysInfo";
   const pluginHomepageUrl = "https://github.com/Highpoint2000/Sysinfo/releases";
   
@@ -69,9 +69,6 @@
 
   // ------------------------------------------------------------------
   // Update Check Logic (Robust Version)
-  // ------------------------------------------------------------------
-  // ------------------------------------------------------------------
-  // Update Check Logic (Original MetricsMonitor Style)
   // ------------------------------------------------------------------
   function checkUpdate(setupOnly, pluginName, urlUpdateLink, urlFetchLink) {
     const isSetupPath = (window.location.pathname || "/").indexOf("/setup") >= 0;
@@ -240,22 +237,27 @@
     memBar.style.backgroundColor = getColorForPercentage(memVal, 75, 90);
 
     // Disk Usage
-    const diskVal = parseFloat(data.diskPercent);
-    document.getElementById('sys-disk-val').textContent = `${data.diskPercent}%`;
-    document.getElementById('sys-disk-text').textContent = `${formatBytes(data.diskUsed)} / ${formatBytes(data.diskTotal)}`;
-    document.getElementById('sys-disk-bar').style.width = `${data.diskPercent}%`;
-    
-    // Colors: <80 (Green), 80-95 (Orange), >95 (Red)
-    const diskBar = document.getElementById('sys-disk-bar');
-    diskBar.style.backgroundColor = getColorForPercentage(diskVal, 80, 95);
-    
-    // Dynamic Label (C: or /)
-    // If distro is windows, assume C: if not explicitly provided otherwise by backend, 
-    // but usually user just wants to see "Disk"
-    let diskLabel = "Disk";
-    if (data.platform === "win32" || data.platform === "windows") diskLabel = "Disk (C:)";
-    else diskLabel = "Disk:";
-    document.getElementById('sys-disk-label').textContent = diskLabel;
+    const diskSection = document.getElementById('sys-disk-section');
+    if (isAdmin) {
+        if (diskSection) diskSection.style.display = 'block';
+        
+        const diskVal = parseFloat(data.diskPercent);
+        document.getElementById('sys-disk-val').textContent = `${data.diskPercent}%`;
+        document.getElementById('sys-disk-text').textContent = `${formatBytes(data.diskUsed)} / ${formatBytes(data.diskTotal)}`;
+        document.getElementById('sys-disk-bar').style.width = `${data.diskPercent}%`;
+        
+        // Colors: <80 (Green), 80-95 (Orange), >95 (Red)
+        const diskBar = document.getElementById('sys-disk-bar');
+        diskBar.style.backgroundColor = getColorForPercentage(diskVal, 80, 95);
+        
+        // Dynamic Label (C: or /)
+        let diskLabel = "Disk";
+        if (data.platform === "win32" || data.platform === "windows") diskLabel = "Disk (C:)";
+        else diskLabel = "Disk:";
+        document.getElementById('sys-disk-label').textContent = diskLabel;
+    } else {
+        if (diskSection) diskSection.style.display = 'none';
+    }
 
     // Core Data
     const coresContainer = document.getElementById('sys-cores-container');
@@ -417,8 +419,8 @@
         <div style="text-align:right; font-size:10px; color:#888; margin-top:2px;" id="sys-mem-text">- / -</div>
       </div>
 
-      <!-- Disk Section -->
-      <div class="sys-group" style="margin-top:5px;">
+      <!-- Disk Section (Wrapped in ID for hiding) -->
+      <div id="sys-disk-section" class="sys-group" style="margin-top:5px; display:none;">
         <div class="sys-row">
             <span id="sys-disk-label" class="sys-label">Disk:</span> 
             <span id="sys-disk-val" class="sys-val">0%</span>
@@ -496,6 +498,7 @@
 
   // --- Toolbar Button ---
   (function () {
+    // Immediate check if we should even show the button
     if (RestrictButtonToAdmin && !isAdmin) return;
 
     const btnId = 'SysInfo-on-off';
@@ -507,9 +510,12 @@
         
         const btnObs = new MutationObserver((_, o2) => {
           const $btn = $(`#${btnId}`);
-          $btn.addClass("hide-phone bg-color-2");
+          
           if ($btn.length) {
             o2.disconnect();
+
+            $btn.addClass("hide-phone bg-color-2");
+            
             const css = `
               #${btnId}:hover { color: var(--color-5); filter: brightness(120%); }
               #${btnId}.active { background-color: var(--color-2)!important; filter: brightness(120%); }

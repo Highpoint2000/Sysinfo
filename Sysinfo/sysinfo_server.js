@@ -1,17 +1,12 @@
 ///////////////////////////////////////////////////////////////
 ///                                                         ///
-///  SYSINFO SERVER SCRIPT FOR FM-DX-WEBSERVER (V1.2)       ///
+///  SYSINFO SERVER SCRIPT FOR FM-DX-WEBSERVER (V1.3)       ///
 ///                                                         ///
-///  by Highpoint                last update: 06.02.26      ///
+///  by Highpoint                last update: 17.02.26      ///
 ///                                                         ///
 ///  https://github.com/Highpoint2000/Sysinfo               ///
 ///                                                         ///
 ///////////////////////////////////////////////////////////////
-
-// Default Configuration
-const defaultConfig = {
-  UpdateInterval: 2000          // 2 seconds default
-};
 
 const path = require('path');
 const fs = require('fs');
@@ -22,7 +17,14 @@ const os = require('os');
 // Integration into existing logging/config structure
 const { logInfo, logError, logWarn } = require('./../../server/console');
 const ConfigFilePath = path.join(__dirname, './../../plugins_configs/sysinfo.json');
+const ClientScriptPath = path.join(__dirname, 'sysinfo.js');
 const config = require('./../../config.json');
+
+// Default Configuration
+const defaultConfig = {
+  UpdateInterval: 2000,         // 2 seconds default
+  RestrictButtonToAdmin: false  // Button visibility restriction
+};
 
 // --- Config Loading ---
 function mergeConfig(defaultCfg, existingCfg) {
@@ -40,7 +42,11 @@ function loadConfig(filePath) {
     fs.mkdirSync(dirPath, { recursive: true });
   }
   if (fs.existsSync(filePath)) {
-    existingConfig = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    try {
+        existingConfig = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    } catch (e) {
+        logError('[SysInfo] Error reading config file. Using defaults.');
+    }
   }
   const finalConfig = mergeConfig(defaultConfig, existingConfig);
   fs.writeFileSync(filePath, JSON.stringify(finalConfig, null, 2), 'utf-8');
@@ -49,6 +55,37 @@ function loadConfig(filePath) {
 
 const configPlugin = loadConfig(ConfigFilePath);
 const updateInterval = configPlugin.UpdateInterval || 2000;
+
+// --- Inject Config into Client Script ---
+function injectConfigToClientScript() {
+    try {
+        if (!fs.existsSync(ClientScriptPath)) {
+            logError(`[SysInfo] Client script not found at ${ClientScriptPath}`);
+            return;
+        }
+
+        let content = fs.readFileSync(ClientScriptPath, 'utf8');
+        
+        // Regex to find: const RestrictButtonToAdmin = ...;
+        // We replace it with the value from the config
+        const restrictVal = configPlugin.RestrictButtonToAdmin;
+        const newContent = content.replace(
+            /const\s+RestrictButtonToAdmin\s*=\s*(true|false);/, 
+            `const RestrictButtonToAdmin = ${restrictVal};`
+        );
+
+        if (content !== newContent) {
+            fs.writeFileSync(ClientScriptPath, newContent, 'utf8');
+            logInfo(`[SysInfo] Updated client script with RestrictButtonToAdmin = ${restrictVal}`);
+        }
+    } catch (e) {
+        logError(`[SysInfo] Failed to inject config into client script: ${e.message}`);
+    }
+}
+
+// Run injection immediately
+injectConfigToClientScript();
+
 
 // --- Module Installation ---
 const NewModules = ['node-os-utils', 'ws'];
@@ -103,7 +140,7 @@ let cachedData = {
     diskUsed: 0, diskTotal: 0, diskPercent: 0,
     uptime: 0,
     netIp: '-', netIface: '-',
-    throttled: false,
+    throttled: false
 };
 
 let isRaspberry = false;
