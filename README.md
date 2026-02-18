@@ -7,6 +7,7 @@ This plugin displays relevant system data on the web interface.
 
 - Storage capacity display now only visible to administrators
 - Enabling the Sysinfo button for all users is now available as a fixed setting in the sysinfo.json file located in the \plugin_configs folder
+- Network data display restored
 
 ## Installation notes:
 

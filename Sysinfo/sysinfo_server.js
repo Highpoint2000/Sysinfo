@@ -2,7 +2,7 @@
 ///                                                         ///
 ///  SYSINFO SERVER SCRIPT FOR FM-DX-WEBSERVER (V1.3)       ///
 ///                                                         ///
-///  by Highpoint                last update: 17.02.26      ///
+///  by Highpoint                last update: 2025-02-18    ///
 ///                                                         ///
 ///  https://github.com/Highpoint2000/Sysinfo               ///
 ///                                                         ///
@@ -23,7 +23,7 @@ const config = require('./../../config.json');
 // Default Configuration
 const defaultConfig = {
   UpdateInterval: 2000,         // 2 seconds default
-  RestrictButtonToAdmin: true  // Button visibility restriction
+  RestrictButtonToAdmin: true   // Button visibility restriction
 };
 
 // --- Config Loading ---
@@ -180,6 +180,63 @@ function getCpuUsageNative() {
     return Math.max(0, Math.min(100, usage)); // Clamp 0-100
 }
 
+// --- Native Network Stats (Fallback) ---
+async function getNetworkStatsNative() {
+    return new Promise((resolve) => {
+        if (isWindows) {
+            // Windows: netstat -e
+            exec('netstat -e', (error, stdout) => {
+                if (error) { resolve(null); return; }
+                try {
+                    const lines = stdout.split('\n');
+                    // Look for the line starting with "Bytes"
+                    for (let line of lines) {
+                        if (line.trim().startsWith("Bytes")) {
+                            const parts = line.trim().split(/\s+/);
+                            if (parts.length >= 3) {
+                                resolve({
+                                    rx: parseInt(parts[1]),
+                                    tx: parseInt(parts[2])
+                                });
+                                return;
+                            }
+                        }
+                    }
+                    resolve(null);
+                } catch (e) { resolve(null); }
+            });
+        } else {
+            // Linux/macOS: Read /proc/net/dev
+            fs.readFile('/proc/net/dev', 'utf8', (err, data) => {
+                if (err) { resolve(null); return; }
+                try {
+                    const lines = data.split('\n');
+                    let totalRx = 0;
+                    let totalTx = 0;
+                    // Skip header lines (usually first 2)
+                    for (let i = 2; i < lines.length; i++) {
+                        const line = lines[i].trim();
+                        if (!line) continue;
+                        const parts = line.split(/\s+/);
+                        
+                        if (parts.length > 8) {
+                            // Simple heuristic: parts[0] is name.
+                            if (parts[0].indexOf(':') > -1 && parts[0].length > parts[0].indexOf(':') + 1) {
+                                // Weird formatting case
+                            } else {
+                                totalRx += parseInt(parts[1]);
+                                totalTx += parseInt(parts[9]);
+                            }
+                        }
+                    }
+                    resolve({ rx: totalRx, tx: totalTx });
+                } catch (e) { resolve(null); }
+            });
+        }
+    });
+}
+
+
 // --- 1. VERY SLOW INIT (Runs only ONCE at start) ---
 async function initStaticData() {
     try {
@@ -196,15 +253,59 @@ async function initStaticData() {
             isRaspberry = true;
         }
         
-        // Network Interface Discovery (lightweight)
+        // Smart Network Interface Discovery
+        // We want to prioritize physical interfaces (Ethernet, Wi-Fi) over virtual ones (NordLynx, VMware, etc.)
         const networkInterfaces = os.networkInterfaces();
+        let bestIface = null;
+        let bestScore = -1;
+
+        // Scoring rules: 
+        // 10 points: Name contains "Ethernet", "Wi-Fi", "eth", "wlan", "en"
+        // 1 point: Any other valid interface
+        // -5 points: Name contains "Virtual", "VMware", "NordLynx", "VPN", "vEthernet", "Pseudo", "docker", "tun", "tap"
+
         for (const [name, interfaces] of Object.entries(networkInterfaces)) {
             const ipv4 = interfaces.find(i => i.family === 'IPv4' && !i.internal);
-            if (ipv4) {
-                cachedData.netIface = name;
-                cachedData.netIp = ipv4.address;
-                break;
+            if (!ipv4) continue;
+
+            let score = 1;
+            const lowerName = name.toLowerCase();
+
+            // Deprioritize virtual/VPN interfaces
+            if (lowerName.includes('virtual') || 
+                lowerName.includes('vmware') || 
+                lowerName.includes('nordlynx') || 
+                lowerName.includes('vpn') || 
+                lowerName.includes('vethernet') || 
+                lowerName.includes('pseudo') ||
+                lowerName.includes('docker') ||
+                lowerName.includes('tun') ||
+                lowerName.includes('tap')) {
+                score = -5;
+            } 
+            // Prioritize physical interfaces
+            else if (lowerName.includes('ethernet') || 
+                     lowerName.includes('wi-fi') || 
+                     lowerName.includes('eth') || 
+                     lowerName.includes('wlan') || 
+                     lowerName.includes('en')) {
+                score = 10;
             }
+
+            // Update if this interface has a higher score than the current best
+            if (score > bestScore) {
+                bestScore = score;
+                bestIface = { name: name, ip: ipv4.address };
+            }
+        }
+
+        if (bestIface) {
+            cachedData.netIface = bestIface.name;
+            cachedData.netIp = bestIface.ip;
+        } else {
+            // Fallback if nothing found
+            cachedData.netIface = '-';
+            cachedData.netIp = '-';
         }
         
         // Total Memory (instant)
@@ -215,7 +316,7 @@ async function initStaticData() {
             previousCpuUsage = os.cpus();
         }
         
-        logInfo(`[SysInfo] Init done. OS: ${cachedData.platform}, Interface: ${cachedData.netIface}`);
+        logInfo(`[SysInfo] Init done. OS: ${cachedData.platform}, Interface: ${cachedData.netIface} (IP: ${cachedData.netIp})`);
     } catch (e) {
         logError('[SysInfo] Init Error:', e);
     }
@@ -241,7 +342,7 @@ function checkRpiThrottling() {
 // --- CPU Temperature (Optimized for Windows) ---
 async function getCpuTemp() {
     if (isWindows) {
-        // Windows: Use WMI directly (much faster than PowerShell)
+        // Windows: Use WMI directly
         return new Promise((resolve) => {
             exec('wmic /namespace:\\\\root\\wmi PATH MSAcpi_ThermalZoneTemperature get CurrentTemperature', 
                 { timeout: 2000 }, 
@@ -425,30 +526,48 @@ async function updateLightData() {
         cachedData.memPercent = ((cachedData.memUsed / totalMem) * 100).toFixed(1);
         
         // Network Traffic
+        let currentRx = 0;
+        let currentTx = 0;
+        let statsFound = false;
+
+        // Try node-os-utils first if enabled
         if (!useNativeAPIs && osUtils) {
             try {
                 const netInfo = await osUtils.netstat.inOut();
-                const now = Date.now();
-                const timeDiff = (now - lastNetStats.time) / 1000;
-                
-                if (timeDiff > 0 && lastNetStats.rx > 0) {
-                    const currentRx = netInfo.total.inputMb * 1024 * 1024;
-                    const currentTx = netInfo.total.outputMb * 1024 * 1024;
-                    
-                    cachedData.netRx = Math.round((currentRx - lastNetStats.rx) / timeDiff);
-                    cachedData.netTx = Math.round((currentTx - lastNetStats.tx) / timeDiff);
-                    
-                    lastNetStats = { rx: currentRx, tx: currentTx, time: now };
-                } else {
-                    lastNetStats = {
-                        rx: netInfo.total.inputMb * 1024 * 1024,
-                        tx: netInfo.total.outputMb * 1024 * 1024,
-                        time: now
-                    };
+                if (netInfo && netInfo.total) {
+                    currentRx = netInfo.total.inputMb * 1024 * 1024;
+                    currentTx = netInfo.total.outputMb * 1024 * 1024;
+                    statsFound = true;
                 }
             } catch (e) {
-                // Netstat failed, ignore
+                // Ignore failure
             }
+        }
+
+        // If osUtils failed or is disabled, use native fallback
+        if (!statsFound) {
+            const nativeStats = await getNetworkStatsNative();
+            if (nativeStats) {
+                currentRx = nativeStats.rx;
+                currentTx = nativeStats.tx;
+                statsFound = true;
+            }
+        }
+
+        // Calculate Speed
+        const now = Date.now();
+        const timeDiff = (now - lastNetStats.time) / 1000; // in seconds
+
+        if (statsFound && timeDiff > 0 && lastNetStats.rx > 0) {
+            // Prevent negative spikes if counters reset
+            if (currentRx >= lastNetStats.rx && currentTx >= lastNetStats.tx) {
+                cachedData.netRx = Math.round((currentRx - lastNetStats.rx) / timeDiff);
+                cachedData.netTx = Math.round((currentTx - lastNetStats.tx) / timeDiff);
+            }
+        }
+
+        if (statsFound) {
+            lastNetStats = { rx: currentRx, tx: currentTx, time: now };
         }
         
         sendPayload();

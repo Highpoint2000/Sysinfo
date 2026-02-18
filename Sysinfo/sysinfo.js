@@ -3,7 +3,7 @@
   ///                                                          ///
   ///  SYSINFO CLIENT SCRIPT FOR FM-DX-WEBSERVER (V1.3)        ///
   ///                                                          ///
-  ///  by Highpoint                last update: 17.02.26       ///
+  ///  by Highpoint                last update: 18.02.26       ///
   ///                                                          ///
   ///  https://github.com/Highpoint2000/Sysinfo                ///
   ///                                                          ///
