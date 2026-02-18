@@ -25,6 +25,8 @@ The following variables can be changed in the sysinfo.json:
     "UpdateInterval": 2000,          // Configure the update interval here (default is 2000)
     "RestrictButtonToAdmin": true   // Set it to false if the system info button should be accessible for all users (default is true) 
 
+After making changes to the script, the server must be restarted!!!
+
 ## Notes: 
 
 - The IP address and storage capacity of the interface used is only displayed to logged-in users
