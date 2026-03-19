@@ -1,7 +1,7 @@
 // Plugin configuration, this is used in the administration when plugins are loaded
 var pluginConfig = {
     name: 'Sysinfo Plugin',
-    version: '1.3',
+    version: '1.3a',
     author: 'Highpoint',
     frontEndPath: 'Sysinfo/sysinfo.js'
 }
