@@ -1,9 +1,9 @@
 (() => {
   ////////////////////////////////////////////////////////////////
   ///                                                          ///
-  ///  SYSINFO CLIENT SCRIPT FOR FM-DX-WEBSERVER (V1.3)        ///
+  ///  SYSINFO CLIENT SCRIPT FOR FM-DX-WEBSERVER (V1.3a)       ///
   ///                                                          ///
-  ///  by Highpoint                last update: 18.02.26       ///
+  ///  by Highpoint                last update: 2026-03-19     ///
   ///                                                          ///
   ///  https://github.com/Highpoint2000/Sysinfo                ///
   ///                                                          ///
@@ -16,10 +16,10 @@
   ///////////////////////////////////////////////////////////////
 
   // ------------- Admin Configuration ----------------
-  const RestrictButtonToAdmin = true;  // Do not touch - this value is automatically updated via the config file
+  const RestrictButtonToAdmin = false;  // Do not touch - this value is automatically updated via the config file
 
   // Plugin metadata
-  const pluginVersion = '1.3';
+  const pluginVersion = '1.3a';
   const pluginName = "SysInfo";
   const pluginHomepageUrl = "https://github.com/Highpoint2000/Sysinfo/releases";
   
@@ -35,8 +35,11 @@
   const WS_URL = `${proto}//${host}:${port}${path}data_plugins`;
   let ws = null;
 
-  // Toggle state for CPU cores
+  // Toggle states
   let showCores = false;
+  
+  // Default to true (Bits per second). It will only be false if the user explicitly turned it off.
+  let useBitsForNet = localStorage.getItem('sysinfoUseBits') !== 'false'; 
   
   // Storage for last received data to enable instant UI updates
   let lastData = null;
@@ -165,6 +168,17 @@
   }
   
   function formatSpeed(bytesPerSec) {
+      // If user enabled Bit mode (default), multiply by 8 and use base 1000
+      if (useBitsForNet) {
+          const bits = bytesPerSec * 8;
+          if (bits === 0) return '0 bps';
+          const k = 1000; // Network speeds in bits typically use base 1000
+          const sizes = ['bps', 'Kbps', 'Mbps', 'Gbps', 'Tbps'];
+          const i = Math.floor(Math.log(bits) / Math.log(k));
+          return parseFloat((bits / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+      }
+      
+      // Fallback to Byte mode when switch is off
       return formatBytes(bytesPerSec) + '/s';
   }
 
@@ -305,6 +319,79 @@
             netIpElement.style.display = 'none';
         }
     }
+  }
+
+  // --- Inject Settings Toggle (Robust DOM Clone) ---
+  function setupSettingsToggle() {
+    // Target the settings container located in the modal panel
+    const settingsContainer = document.querySelector('.modal-panel-content .auto');
+    const imperialCheckbox = document.getElementById('imperial-units');
+
+    if (settingsContainer && imperialCheckbox && !document.getElementById('sysinfo-use-bits')) {
+        
+        // Find the exact outer wrapper of the Imperial Units component
+        let wrapper = imperialCheckbox;
+        while (wrapper && wrapper.parentElement && !wrapper.parentElement.classList.contains('auto')) {
+            wrapper = wrapper.parentElement;
+        }
+
+        if (wrapper) {
+            // Clone the actual DOM node so we don't mess up existing event listeners
+            let clonedWrapper = wrapper.cloneNode(true);
+            
+            // Hide this specific setting on mobile phones
+            clonedWrapper.classList.add('hide-phone');
+            
+            // Set the correct ID and check state
+            let inputNode = clonedWrapper.querySelector('input[type="checkbox"]');
+            if (inputNode) {
+                inputNode.id = 'sysinfo-use-bits';
+                inputNode.checked = useBitsForNet;
+            }
+            
+            // Update the 'for' attribute on the label if it exists
+            let labelNode = clonedWrapper.tagName.toLowerCase() === 'label' ? clonedWrapper : clonedWrapper.querySelector('label');
+            if (labelNode && labelNode.hasAttribute('for')) {
+                labelNode.setAttribute('for', 'sysinfo-use-bits');
+            }
+            
+            // Recursively search and replace the text content to avoid HTML casing issues
+            const walkAndReplaceText = (node) => {
+                if (node.nodeType === Node.TEXT_NODE) {
+                    // Use case-insensitive Regex to catch "Imperial units", "IMPERIAL UNITS", etc.
+                    if (/imperial units/i.test(node.textContent)) {
+                        node.textContent = node.textContent.replace(/imperial units/i, 'Speed in Bits (Sysinfo)');
+                    }
+                } else {
+                    for (let child of node.childNodes) {
+                        walkAndReplaceText(child);
+                    }
+                }
+            };
+            walkAndReplaceText(clonedWrapper);
+
+            // Append the fresh clone to the container
+            settingsContainer.appendChild(clonedWrapper);
+
+            // Bind event listener to the newly injected wrapper
+            clonedWrapper.addEventListener('change', (e) => {
+                if (e.target.id === 'sysinfo-use-bits') {
+                    useBitsForNet = e.target.checked;
+                    localStorage.setItem('sysinfoUseBits', useBitsForNet);
+                    
+                    // Re-render UI instantly if we have cached data
+                    if (lastData) updateUI(lastData);
+                }
+            });
+        }
+    }
+  }
+
+  // Try to setup settings immediately or wait for DOM
+  if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', setupSettingsToggle);
+  } else {
+      setupSettingsToggle();
   }
 
   // --- Create UI Overlay ---
@@ -507,6 +594,9 @@
       if (typeof addIconToPluginPanel === 'function') {
         found = true; o.disconnect();
         addIconToPluginPanel(btnId, 'SysInfo', 'solid', 'microchip', `Plugin Version: ${pluginVersion}`);
+        
+        // Ensure settings are attached in case DOM loaded slowly
+        setupSettingsToggle();
         
         const btnObs = new MutationObserver((_, o2) => {
           const $btn = $(`#${btnId}`);

@@ -1,8 +1,8 @@
 ///////////////////////////////////////////////////////////////
 ///                                                         ///
-///  SYSINFO SERVER SCRIPT FOR FM-DX-WEBSERVER (V1.3)       ///
+///  SYSINFO SERVER SCRIPT FOR FM-DX-WEBSERVER (V1.3a)      ///
 ///                                                         ///
-///  by Highpoint                last update: 2025-02-18    ///
+///  by Highpoint                last update: 2025-04-19    ///
 ///                                                         ///
 ///  https://github.com/Highpoint2000/Sysinfo               ///
 ///                                                         ///

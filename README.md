@@ -3,11 +3,9 @@ This plugin displays relevant system data on the web interface.
 
 <img width="1446" height="832" alt="image" src="https://github.com/user-attachments/assets/23723773-30ed-469a-8cdd-41a27463c35b" />
 
-## Version 1.3
+## Version 1.3a
 
-- Storage capacity display now only visible to administrators
-- Enabling the Sysinfo button for all users is now available as a fixed setting in the sysinfo.json file located in the \plugin_configs folder
-- Network data display restored
+- Switch for toggling units from bytes per second to bits per second added to the web server settings
 
 ## Installation notes:
 
@@ -44,6 +42,12 @@ If you have any questions, would like to report problems, or have suggestions fo
 
 <details>
 <summary>History</summary>
+
+### Version 1.3
+
+- Storage capacity display now only visible to administrators
+- Enabling the Sysinfo button for all users is now available as a fixed setting in the sysinfo.json file located in the \plugin_configs folder
+- Network data display restored
 
 ### Version 1.2
 
